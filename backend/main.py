@@ -3,14 +3,12 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 
-import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from diffusers import StableDiffusionPipeline
 from PIL import Image
 import random
 import os
@@ -47,10 +45,6 @@ tokenizer = T5Tokenizer.from_pretrained("t5-small")
 sentence_model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
 # Image Generation
-# Note: This is a placeholder for a real Stable Diffusion model.
-# For a real application, you would load a model like "runwayml/stable-diffusion-v1-5"
-# and have the appropriate hardware (GPU).
-# For this example, we'll simulate image generation.
 def generate_cartoon_image(prompt: str):
     """
     Simulates generating a cartoon image.
@@ -58,20 +52,22 @@ def generate_cartoon_image(prompt: str):
     """
     # Create a dummy image
     img = Image.new('RGB', (256, 256), color = '#%06x' % random.randint(0, 0xFFFFFF))
-    # You could draw some text on it
-    # from PIL import ImageDraw
-    # d = ImageDraw.Draw(img)
-    # d.text((10,10), prompt, fill=(255,255,0))
-    # Save it to a file
-    if not os.path.exists("frontend/public/images"):
-        os.makedirs("frontend/public/images")
+    
+    # Define the base directory for images relative to the frontend's public folder
+    image_dir = "frontend/public/images"
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir)
 
-    image_path = f"frontend/public/images/{prompt.replace(' ', '_')}.png"
+    # Sanitize the prompt to create a valid filename
+    safe_prompt = "".join(c for c in prompt if c.isalnum() or c in (' ', '_')).rstrip()
+    image_filename = f"{safe_prompt.replace(' ', '_')}.png"
+    image_path = os.path.join(image_dir, image_filename)
+    
     img.save(image_path)
-    return f"/images/{prompt.replace(' ', '_')}.png"
+    return f"/images/{image_filename}"
 
 # --- Authentication ---
-SECRET_KEY = "your-secret-key"  # In a real app, use environment variables
+SECRET_KEY = os.environ.get("SECRET_KEY", "your-default-secret-key") # Use environment variables in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -87,9 +83,9 @@ def get_password_hash(password):
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -119,7 +115,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
 @app.post("/token", response_model=schemas.Token)
@@ -146,8 +142,8 @@ def generate_sentence(word: str, current_user: schemas.User = Depends(get_curren
     if current_user.tier == "free":
         # Check daily word limit
         today = date.today()
-        start_of_day = today
-        end_of_day = today + timedelta(days=1)
+        start_of_day = datetime.combine(today, datetime.min.time())
+        end_of_day = datetime.combine(today, datetime.max.time())
         words_today = (
             db.query(models.Word)
             .filter(
@@ -163,8 +159,15 @@ def generate_sentence(word: str, current_user: schemas.User = Depends(get_curren
     # Generate sentence
     input_text = f"A kid-friendly sentence with the word {word}:"
     input_ids = tokenizer(input_text, return_tensors="pt").input_ids
-    outputs = sentence_model.generate(input_ids, max_length=32, num_beams=4, early_stopping=True)
+    outputs = sentence_model.generate(.input_ids, max_length=32, num_beams=4, early_stopping=True)
     sentence = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    # Store the generated word for the user
+    new_word = models.Word(word=word, sentence=sentence, owner_id=current_user.id)
+    db.add(new_word)
+    db.commit()
+    db.refresh(new_word)
+    
     return {"sentence": sentence}
 
 @app.post("/generate_quiz")
@@ -172,9 +175,10 @@ def generate_quiz(word: str, sentence: str):
     # Create a fill-in-the-blank quiz
     quiz_question = sentence.replace(word, "______")
     options = [word]
-    # Add two random distractor words (this could be improved)
+    # Add two random distractor words
     distractors = ["apple", "house", "car", "dog", "school"]
-    distractors.remove(word) if word in distractors else None
+    if word in distractors:
+        distractors.remove(word)
     options.extend(random.sample(distractors, 2))
     random.shuffle(options)
     return {"question": quiz_question, "options": options, "answer": word}
@@ -186,7 +190,7 @@ def generate_image(word: str):
 
 @app.get("/progress/{user_id}", response_model=List[schemas.Progress])
 def get_progress(user_id: int, current_user: schemas.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.id != user_id and current_user.tier != "paid":
+    if current_user.id != user_id:
          raise HTTPException(status_code=403, detail="Not authorized to view this progress")
     return crud.get_progress(db=db, user_id=user_id)
 
