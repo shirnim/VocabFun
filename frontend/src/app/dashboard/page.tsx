@@ -27,14 +27,7 @@ export default function DashboardPage() {
         const currentUser = userResponse.data;
         setUser(currentUser);
 
-        // 2. Check if the user is on the paid tier
-        if (currentUser.tier !== 'paid') {
-          setError('This dashboard is only available for paid users.');
-          setLoading(false);
-          return;
-        }
-
-        // 3. Fetch progress data
+        // 2. Fetch progress data
         const progressResponse = await axios.get(
           `http://localhost:8000/progress/${currentUser.id}`,
           {
