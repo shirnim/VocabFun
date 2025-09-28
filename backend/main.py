@@ -1,38 +1,61 @@
 
+import os
+import random
+import requests
+from datetime import date, datetime
+from typing import List
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import date, timedelta, datetime, timezone
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-from . import crud, models, schemas
+from . import crud, models, schemas, security
 from .database import SessionLocal, engine
 
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-from PIL import Image
-import random
-import os
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+# --- Environment Variables & Configuration ---
 
+# Check for SECRET_KEY
+if not security.SECRET_KEY:
+    raise ValueError("Missing SECRET_KEY environment variable. Cannot start application.")
+
+# Unsplash Access Key
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
+if not UNSPLASH_ACCESS_KEY:
+    print("Warning: UNSPLASH_ACCESS_KEY environment variable not set. Image generation will use fallback.")
+
+# Frontend URL for CORS
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# Fallback images directory
+FALLBACK_IMAGE_DIR = "backend/static/images"
+os.makedirs(FALLBACK_IMAGE_DIR, exist_ok=True) # Ensure directory exists
 
 # --- Database Setup ---
 models.Base.metadata.create_all(bind=engine)
 
+# --- FastAPI App Initialization ---
 app = FastAPI()
+
+# --- Static Files ---
+# This will serve images from `backend/static/images` under the path `/static/images`
+app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+
 
 # --- CORS Middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allows frontend to connect
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Dependency ---
+# --- Dependencies ---
 def get_db():
+    """Dependency to get a database session."""
     db = SessionLocal()
     try:
         yield db
@@ -40,77 +63,14 @@ def get_db():
         db.close()
 
 # --- AI Model Setup ---
-# Sentence Generation
-tokenizer = T5Tokenizer.from_pretrained("t5-small")
-sentence_model = T5ForConditionalGeneration.from_pretrained("t5-small")
-
-# Image Generation
-def generate_cartoon_image(prompt: str):
-    """
-    Simulates generating a cartoon image.
-    In a real app, you'd use a library like `diffusers` and a pre-trained model.
-    """
-    # Create a dummy image
-    img = Image.new('RGB', (256, 256), color = '#%06x' % random.randint(0, 0xFFFFFF))
-    
-    # Define the base directory for images relative to the frontend's public folder
-    image_dir = "frontend/public/images"
-    if not os.path.exists(image_dir):
-        os.makedirs(image_dir)
-
-    # Sanitize the prompt to create a valid filename
-    safe_prompt = "".join(c for c in prompt if c.isalnum() or c in (' ', '_')).rstrip()
-    image_filename = f"{safe_prompt.replace(' ', '_')}.png"
-    image_path = os.path.join(image_dir, image_filename)
-    
-    img.save(image_path)
-    return f"/images/{image_filename}"
-
-# --- Authentication ---
-SECRET_KEY = os.environ.get("SECRET_KEY", "your-default-secret-key") # Use environment variables in production
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = schemas.TokenData(email=email)
-    except JWTError:
-        raise credentials_exception
-    user = crud.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
-    return user
+# Using a smaller, more efficient model for sentence generation
+tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
+sentence_model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
 
 
 # --- API Endpoints ---
+
+# region Authentication
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
@@ -121,26 +81,29 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
+    access_token = security.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me/", response_model=schemas.User)
-async def read_users_me(current_user: schemas.User = Depends(get_current_user)):
+async def read_users_me(current_user: schemas.User = Depends(security.get_current_active_user)):
     return current_user
 
+# endregion
+
+# region Core Features
 @app.post("/generate_sentence")
-def generate_sentence(word: str, current_user: schemas.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def generate_sentence(
+    word: str,
+    current_user: schemas.User = Depends(security.get_current_active_user),
+    db: Session = Depends(get_db)
+):
     if current_user.tier == "free":
-        # Check daily word limit
         today = date.today()
         start_of_day = datetime.combine(today, datetime.min.time())
         end_of_day = datetime.combine(today, datetime.max.time())
@@ -153,48 +116,94 @@ def generate_sentence(word: str, current_user: schemas.User = Depends(get_curren
             )
             .count()
         )
-        if words_today >= 5:
-            raise HTTPException(status_code=403, detail="Free tier daily limit reached")
+        if words_today >= 10:  # Increased free tier limit
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You have reached your daily limit of 10 words for the free tier."
+            )
 
     # Generate sentence
-    input_text = f"A kid-friendly sentence with the word {word}:"
+    input_text = f"A simple, kid-friendly sentence using the word '{word}':"
     input_ids = tokenizer(input_text, return_tensors="pt").input_ids
-    outputs = sentence_model.generate(.input_ids, max_length=32, num_beams=4, early_stopping=True)
+    outputs = sentence_model.generate(input_ids, max_length=40, num_beams=5, early_stopping=True)
     sentence = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
+
     # Store the generated word for the user
-    new_word = models.Word(word=word, sentence=sentence, owner_id=current_user.id)
-    db.add(new_word)
-    db.commit()
-    db.refresh(new_word)
-    
+    crud.create_user_word(db, word=schemas.WordCreate(word=word, sentence=sentence), user_id=current_user.id)
+
     return {"sentence": sentence}
 
 @app.post("/generate_quiz")
-def generate_quiz(word: str, sentence: str):
-    # Create a fill-in-the-blank quiz
+def generate_quiz(
+    word: str,
+    sentence: str,
+    current_user: schemas.User = Depends(security.get_current_active_user)
+):
     quiz_question = sentence.replace(word, "______")
     options = [word]
-    # Add two random distractor words
-    distractors = ["apple", "house", "car", "dog", "school"]
-    if word in distractors:
-        distractors.remove(word)
-    options.extend(random.sample(distractors, 2))
+    try:
+        response = requests.get("https://random-word-api.herokuapp.com/word?number=3")
+        response.raise_for_status()
+        distractors = response.json()
+        if word in distractors:
+            distractors.remove(word)
+        options.extend(distractors[:2])  # Ensure only 2 distractors are added
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching random words: {e}. Using fallback.")
+        distractors = ["sun", "moon", "star", "sky", "cloud"]
+        distractors.remove(word) if word in distractors else None
+        options.extend(random.sample(distractors, 2))
+
     random.shuffle(options)
     return {"question": quiz_question, "options": options, "answer": word}
 
 @app.post("/generate_image")
-def generate_image(word: str):
-    image_url = generate_cartoon_image(f"cartoon illustration of {word}")
+def generate_image(
+    word: str,
+    current_user: schemas.User = Depends(security.get_current_active_user)
+):
+    image_url = f"/static/images/fallback_{word.lower()}.png"
+
+    if UNSPLASH_ACCESS_KEY:
+        try:
+            response = requests.get(
+                "https://api.unsplash.com/search/photos",
+                params={"query": f"cartoon {word}", "per_page": 1, "orientation": "squarish"},
+                headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
+            )
+            response.raise_for_status()
+            data = response.json()
+            if data["results"]:
+                image_url = data["results"][0]["urls"]["small"]
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching image from Unsplash: {e}. Using fallback.")
+            # Fallback is already set
+
+    # If the Unsplash call fails or is not configured, we might not have a specific fallback file.
+    # You could create a generic one or check for its existence.
+    fallback_path = os.path.join(FALLBACK_IMAGE_DIR, f"fallback_{word.lower()}.png")
+    if not os.path.exists(fallback_path):
+         # In a real app, you might have generic fallbacks like 'fallback_noun.png'
+        print(f"No specific fallback image found for {word}. A generic one could be used.")
+
     return {"image_url": image_url}
+#endregion
 
-@app.get("/progress/{user_id}", response_model=List[schemas.Progress])
-def get_progress(user_id: int, current_user: schemas.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.id != user_id:
-         raise HTTPException(status_code=403, detail="Not authorized to view this progress")
-    return crud.get_progress(db=db, user_id=user_id)
 
+# region User Progress
+@app.get("/progress/", response_model=List[schemas.Progress])
+def get_my_progress(
+    current_user: schemas.User = Depends(security.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    return crud.get_progress(db=db, user_id=current_user.id)
 
 @app.post("/progress/", response_model=schemas.Progress)
-def create_progress(progress: schemas.ProgressCreate, current_user: schemas.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_or_update_progress(
+    progress: schemas.ProgressCreate,
+    current_user: schemas.User = Depends(security.get_current_active_user),
+    db: Session = Depends(get_db)
+):
     return crud.create_user_progress(db=db, progress=progress, user_id=current_user.id)
+
+#endregion
