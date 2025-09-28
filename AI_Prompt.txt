@@ -1,0 +1,44 @@
+You are an expert SaaS developer. Build a fully working micro SaaS app called "VocabFun" that helps kids learn English vocabulary. The app must include BOTH frontend and backend, with no placeholder logic. Everything should run end-to-end correctly.
+
+🎯 Features:
+1. User enters a vocabulary word (text box).
+2. Backend generates:
+   - A simple, kid-friendly sentence using that word (use HuggingFace model: t5-small for sentence generation).
+   - A 3-option multiple-choice quiz (fill-in-the-blank style).
+   - A cartoon-style image illustrating the word (use Stable Diffusion via diffusers with "cartoon illustration of {word}" prompt).
+3. Track user progress (words learned, quiz scores).
+4. Parent dashboard shows daily/weekly progress (number of words learned + average quiz score).
+5. Free tier: 5 words/day. Paid tier: unlimited + parent dashboard.
+
+🛠 Tech Stack:
+- Frontend: Next.js + Tailwind CSS (colorful, kid-friendly design with card-based UI).
+- Backend: FastAPI with endpoints for sentence generation, quiz creation, image generation, and progress tracking.
+- Database: SQLite (simple user storage, words, scores).
+- AI:
+  - HuggingFace Transformers (t5-small) for sentence generation.
+  - Rule-based quiz generator (take the sentence, replace word with blank, generate 2 distractors).
+  - Diffusers (Stable Diffusion) for cartoon images.
+- Authentication: Email/password using Supabase.
+- Deployment: Frontend on Vercel, Backend on Render.
+
+📡 Backend API Endpoints:
+- POST /generate_sentence (input: word → output: sentence)
+- POST /generate_quiz (input: word, sentence → output: quiz options)
+- POST /generate_image (input: word → output: cartoon image URL/base64)
+- GET /progress/{user_id} (returns words learned, scores)
+
+💻 Frontend Pages:
+- /learn (input word → display sentence + quiz + cartoon image)
+- /dashboard (shows parent progress, words learned, scores)
+- /auth (signup/login page)
+
+✅ Requirements:
+- Code must be fully working, not placeholders.
+- Include working integration between Next.js frontend and FastAPI backend.
+- Include Supabase auth setup for signup/login.
+- Include SQLite schema for storing words, quiz results, and progress.
+- Use Tailwind CSS for styling with kid-friendly, colorful cards.
+- Preconfigure Stable Diffusion in the backend for image generation.
+- Ensure that running `npm run dev` (frontend) and `uvicorn main:app --reload` (backend) works without missing logic.
+
+Deliver a complete project scaffold with working frontend + backend code, ready to run without further iterations.
