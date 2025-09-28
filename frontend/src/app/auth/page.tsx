@@ -1,82 +1,103 @@
 
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { useState, FormEvent } from 'react';
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
 
-const supabase = createClient('https://fcmrscpicaijyejczoaa.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjbXJzY3BpY2FpanllamN6b2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwMzM4NDMsImV4cCI6MjA3NDYwOTg0M30.oobPSpnKjjeMAwpkBvQ2Ewd5GwHS6agnGsoEDl1-5e8')
+export default function AuthPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-export default function Auth() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-    if (error) console.log('Error signing up:', error.message)
-    else console.log('Signed up:', data)
-  }
+    const url = isLogin
+      ? 'http://localhost:8000/token'
+      : 'http://localhost:8000/users/';
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) console.log('Error logging in:', error.message)
-    else console.log('Logged in:', data)
-  }
+    try {
+      let response;
+      if (isLogin) {
+        const formData = new URLSearchParams();
+        formData.append('username', email);
+        formData.append('password', password);
+        response = await axios.post(url, formData);
+        localStorage.setItem('token', response.data.access_token);
+
+      } else {
+        response = await axios.post(url, { email, password });
+        // Automatically log in the user after successful sign-up
+        const formData = new URLSearchParams();
+        formData.append('username', email);
+        formData.append('password', password);
+        const loginResponse = await axios.post('http://localhost:8000/token', formData);
+        localStorage.setItem('token', loginResponse.data.access_token);
+      }
+      
+      router.push('/learn'); // Redirect to the main app page after auth
+    } catch (err: any) {
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError(`An error occurred. Please try again.`);
+      }
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-gray-100">
-      <main className="flex flex-col items-center justify-center w-full flex-1 px-20 text-center">
-        <h1 className="text-6xl font-bold text-blue-600">
-          Auth
-        </h1>
-
-        <form onSubmit={handleSignUp} className="mt-8">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
+        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">
+          {isLogin ? 'Welcome Back!' : 'Create an Account'}
+        </h2>
+        <form onSubmit={handleSubmit} className="space-y-6">
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="px-4 py-2 border rounded-lg"
+            placeholder="Email Address"
+            required
+            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
-            className="ml-4 px-4 py-2 border rounded-lg"
+            required
+            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button type="submit" className="ml-4 px-4 py-2 font-bold text-white bg-blue-500 rounded-lg">
-            Sign Up
-          </button>
-        </form>
 
-        <form onSubmit={handleLogin} className="mt-8">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="px-4 py-2 border rounded-lg"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="ml-4 px-4 py-2 border rounded-lg"
-          />
-          <button type="submit" className="ml-4 px-4 py-2 font-bold text-white bg-green-500 rounded-lg">
-            Login
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 disabled:bg-blue-300 transition-colors"
+          >
+            {loading ? 'Loading...' : isLogin ? 'Login' : 'Sign Up'}
           </button>
         </form>
-      </main>
+        <p className="text-center text-sm text-gray-600 mt-6">
+          {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="font-medium text-blue-500 hover:underline"
+          >
+            {isLogin ? 'Sign Up' : 'Login'}
+          </button>
+        </p>
+      </div>
     </div>
-  )
+  );
 }

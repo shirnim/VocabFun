@@ -1,5 +1,4 @@
-
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -9,26 +8,27 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    tier = Column(String, default="free")  # free or paid
+
+    words = relationship("Word", back_populates="owner")
+    progress = relationship("Progress", back_populates="owner")
 
 class Word(Base):
     __tablename__ = "words"
 
     id = Column(Integer, primary_key=True, index=True)
-    word = Column(String, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    text = Column(String, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="words")
-
-User.words = relationship("Word", order_by=Word.id, back_populates="owner")
 
 class Progress(Base):
     __tablename__ = "progress"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    date = Column(Date)
     words_learned = Column(Integer)
-    average_score = Column(Float)
+    quiz_score = Column(Float)
+    owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="progress")
-
-User.progress = relationship("Progress", back_populates="owner")

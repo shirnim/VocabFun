@@ -1,23 +1,34 @@
-
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import date
 
-class Word(BaseModel):
-    word: str
+class WordBase(BaseModel):
+    text: str
 
-class Sentence(BaseModel):
-    sentence: str
+class WordCreate(WordBase):
+    pass
 
-class Quiz(BaseModel):
-    options: List[str]
-    answer: str
+class Word(WordBase):
+    id: int
+    owner_id: int
 
-class Image(BaseModel):
-    image_url: str
+    class Config:
+        orm_mode = True
 
-class Progress(BaseModel):
+class ProgressBase(BaseModel):
+    date: date
     words_learned: int
-    average_score: float
+    quiz_score: float
+
+class ProgressCreate(ProgressBase):
+    pass
+
+class Progress(ProgressBase):
+    id: int
+    owner_id: int
+
+    class Config:
+        orm_mode = True
 
 class UserBase(BaseModel):
     email: str
@@ -27,6 +38,16 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
+    tier: str
+    words: List[Word] = []
+    progress: List[Progress] = []
 
     class Config:
         orm_mode = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
