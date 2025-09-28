@@ -2,18 +2,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import './globals.css';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     // Check if a token exists in local storage to determine login status
     const token = localStorage.getItem('token');
     setIsLoggedIn(!!token);
-  }, []);
+  }, [pathname]); // Re-run the effect when the route changes
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -25,14 +27,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <nav className="bg-white shadow-md p-4 flex justify-between items-center">
-          <div className="text-2xl font-bold text-blue-600">
-            <Link href="/learn">VocabFun</Link>
+          <div className="text-2xl font-bold text-purple-600">
+            <Link href="/">VocabFun</Link>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/learn" className="text-gray-600 hover:text-blue-500 font-medium">
+            <Link href="/learn" className="text-gray-600 hover:text-purple-500 font-medium">
               Learn
             </Link>
-            <Link href="/dashboard" className="text-gray-600 hover:text-blue-500 font-medium">
+            <Link href="/dashboard" className="text-gray-600 hover:text-purple-500 font-medium">
               Dashboard
             </Link>
             {isLoggedIn ? (
@@ -43,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Logout
               </button>
             ) : (
-              <Link href="/auth" className="text-gray-600 hover:text-blue-500 font-medium">
+              <Link href="/auth" className="text-gray-600 hover:text-purple-500 font-medium">
                 Login
               </Link>
             )}
