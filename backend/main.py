@@ -159,7 +159,7 @@ def generate_sentence(word: str, current_user: schemas.User = Depends(get_curren
     # Generate sentence
     input_text = f"A kid-friendly sentence with the word {word}:"
     input_ids = tokenizer(input_text, return_tensors="pt").input_ids
-    outputs = sentence_model.generate(.input_ids, max_length=32, num_beams=4, early_stopping=True)
+    outputs = sentence_model.generate(input_ids, max_length=32, num_beams=4, early_stopping=True)
     sentence = tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     # Store the generated word for the user
