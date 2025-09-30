@@ -2,13 +2,14 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import api from '@/lib/api'; // Corrected import path
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tier, setTier] = useState('free'); // Default to 'free' tier
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -18,35 +19,29 @@ export default function AuthPage() {
     setLoading(true);
     setError(null);
 
-    const url = isLogin
-      ? 'http://localhost:8000/token'
-      : 'http://localhost:8000/users/';
-
     try {
-      let response;
       if (isLogin) {
         const formData = new URLSearchParams();
         formData.append('username', email);
         formData.append('password', password);
-        response = await axios.post(url, formData);
+        const response = await api.post('/token', formData);
         localStorage.setItem('token', response.data.access_token);
-
       } else {
-        response = await axios.post(url, { email, password });
-        // Automatically log in the user after successful sign-up
+        // Sign up and then log in
+        await api.post('/users/', { email, password, tier });
         const formData = new URLSearchParams();
         formData.append('username', email);
         formData.append('password', password);
-        const loginResponse = await axios.post('http://localhost:8000/token', formData);
+        const loginResponse = await api.post('/token', formData);
         localStorage.setItem('token', loginResponse.data.access_token);
       }
       
-      router.push('/learn'); // Redirect to the main app page after auth
+      router.push('/learn');
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.detail) {
         setError(err.response.data.detail);
       } else {
-        setError(`An error occurred. Please try again.`);
+        setError('An unexpected error occurred. Please try again.');
       }
       console.error(err);
     } finally {
@@ -78,6 +73,17 @@ export default function AuthPage() {
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
+          {!isLogin && (
+            <select 
+              value={tier} 
+              onChange={(e) => setTier(e.target.value)} 
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="free">Free Tier</option>
+              <option value="paid">Paid Tier</option>
+            </select>
+          )}
+
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
           <button
@@ -89,7 +95,7 @@ export default function AuthPage() {
           </button>
         </form>
         <p className="text-center text-sm text-gray-600 mt-6">
-          {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
+          {isLogin ? "Don't have an account?" : 'Already have an account?'} 
           <button
             onClick={() => setIsLogin(!isLogin)}
             className="font-medium text-blue-500 hover:underline"

@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, Float, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+from datetime import datetime
 
 
 Base = declarative_base()
@@ -21,7 +22,8 @@ class Word(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     text = Column(String, index=True)
-    timestamp = Column(Date)
+    sentence = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="words")
@@ -30,7 +32,7 @@ class Progress(Base):
     __tablename__ = "progress"
 
     id = Column(Integer, primary_key=True, index=True)
-    date = Column(Date, index=True)
+    date = Column(DateTime, index=True)
     words_learned = Column(Integer)
     quiz_score = Column(Float)
     owner_id = Column(Integer, ForeignKey("users.id"))

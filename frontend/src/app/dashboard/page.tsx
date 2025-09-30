@@ -2,63 +2,90 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/api';
+
+interface ProgressItem {
+  id: number;
+  date: string;
+  words_learned: number;
+  quiz_score: number;
+}
+
+interface User {
+  id: number;
+  email: string;
+  tier: 'free' | 'paid';
+}
 
 export default function DashboardPage() {
-  const [progress, setProgress] = useState<any[]>([]);
+  const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Please log in to view the dashboard.');
-        setLoading(false);
-        return;
-      }
-
       try {
-        // 1. Fetch current user
-        const userResponse = await axios.get('http://localhost:8000/users/me/', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const currentUser = userResponse.data;
-        setUser(currentUser);
+        const userResponse = await api.get<User>('/users/me/');
+        setUser(userResponse.data);
 
-        // 2. Fetch progress data
-        const progressResponse = await axios.get(
-          `http://localhost:8000/progress/${currentUser.id}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const progressResponse = await api.get<ProgressItem[]>('/progress/');
         setProgress(progressResponse.data);
+
       } catch (err) {
         setError('Failed to load dashboard data. Please try again.');
         console.error(err);
+        // Optional: Redirect to login if any request fails
+        router.push('/auth');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    router.push('/auth');
+  };
 
   const getSummary = () => {
     const totalWords = progress.reduce((sum, item) => sum + item.words_learned, 0);
-    const averageScore = progress.length > 0
-      ? progress.reduce((sum, item) => sum + item.quiz_score, 0) / progress.length
-      : 0;
+    const averageScore =
+      progress.length > 0
+        ? progress.reduce((sum, item) => sum + item.quiz_score, 0) / progress.length
+        : 0;
     return { totalWords, averageScore };
   };
 
   const { totalWords, averageScore } = getSummary();
 
   return (
-    <div className="min-h-screen bg-purple-100 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-8">
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+      <div className="w-full max-w-4xl mx-auto">
+         <header className="flex justify-between items-center py-4">
+          <h1 className="text-2xl font-bold text-purple-700">Kid-Friendly Word Learner</h1>
+          <div>
+            <button 
+              onClick={() => router.push('/learn')}
+              className="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors mr-4"
+            >
+              Learn
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+      </div>
+
+      <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-8 mt-4">
         <h1 className="text-4xl font-bold text-purple-600 mb-6 text-center">Parent Dashboard</h1>
 
         {loading && <p className="text-center">Loading...</p>}
