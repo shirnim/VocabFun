@@ -1,9 +1,13 @@
 
 import os
+import sys
 import random
 import requests
 from datetime import date, datetime
 from typing import List
+
+# Add project root to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import Depends, FastAPI, HTTPException, status, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,8 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-from . import crud, models, schemas, security
-from .database import SessionLocal, engine
+from backend import crud, models, schemas, security
+from backend.database import SessionLocal, engine
 
 # --- Environment Variables & Configuration ---
 
