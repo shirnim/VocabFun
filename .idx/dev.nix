@@ -16,12 +16,14 @@
     pkgs.python311Packages.huggingface-hub
     pkgs.python311Packages.transformers
     pkgs.python311Packages.torch
+    pkgs.python311Packages.sentencepiece
     pkgs.python311Packages.diffusers
     pkgs.python311Packages.accelerate
     pkgs.python311Packages.passlib
     pkgs.python311Packages.python-jose
     pkgs.python311Packages.cryptography
     pkgs.python311Packages.pillow
+    pkgs.python311Packages.requests
     pkgs.nodejs_20
     pkgs.nodePackages.npm
   ];
@@ -57,7 +59,7 @@
           };
         };
         backend = {
-            command = ["uvicorn" "backend.main:app" "--host" "0.0.0.0" "--port" "8000"];
+            command = ["uvicorn" "backend.main:app" "--host" "0.0.0.0" "--port" "8000" "--reload"];
             manager = "process";
         };
       };
@@ -69,6 +71,7 @@
       onCreate = {
         # Example: install JS dependencies from NPM
         npm-install = "npm install --prefix frontend";
+        pip-install = "pip install -r backend/requirements.txt";
       };
       # Runs when the workspace is (re)started
       onStart = {

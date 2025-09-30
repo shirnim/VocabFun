@@ -11,3 +11,4 @@ accelerate
 passlib[bcrypt]
 python-jose[cryptography]
 Pillow
+sentencepiece
