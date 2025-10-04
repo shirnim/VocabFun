@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 class WordBase(BaseModel):
     word: str
@@ -18,7 +18,7 @@ class Word(WordBase):
         orm_mode = True
 
 class ProgressBase(BaseModel):
-    date: datetime
+    date: date
     words_learned: int
     quiz_score: float
 

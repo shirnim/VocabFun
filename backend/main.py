@@ -9,7 +9,7 @@ from typing import List
 # Add project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import Depends, FastAPI, HTTPException, status, Form
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
@@ -83,13 +83,13 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db=db, user=user)
 
 @app.post("/token", response_model=schemas.Token)
-async def login_for_access_token(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = crud.get_user_by_email(db, email=username)
-    if not user or not security.verify_password(password, user.hashed_password):
+async def login_for_access_token(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+    user = crud.get_user_by_email(db, email=user_data.email)
+    if not user or not security.verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={'''WWW-Authenticate''': '''Bearer'''},
         )
     access_token = security.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
