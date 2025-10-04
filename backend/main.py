@@ -101,7 +101,7 @@ async def read_users_me(current_user: schemas.User = Depends(security.get_curren
 # endregion
 
 # region Core Features
-@app.post("/generate_sentence")
+@app.post("/generate_sentence", response_model=schemas.WordBase)
 def generate_sentence(
     word: str,
     current_user: schemas.User = Depends(security.get_current_active_user),
@@ -135,7 +135,7 @@ def generate_sentence(
     # Store the generated word for the user
     crud.create_user_word(db, word=schemas.WordCreate(word=word, sentence=sentence), user_id=current_user.id)
 
-    return {"sentence": sentence}
+    return {"word": word, "sentence": sentence}
 
 @app.post("/generate_quiz")
 def generate_quiz(

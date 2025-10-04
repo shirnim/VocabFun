@@ -24,7 +24,7 @@ def get_words(db: Session, user_id: int, skip: int = 0, limit: int = 100):
 
 
 def create_user_word(db: Session, word: schemas.WordCreate, user_id: int):
-    db_word = models.Word(**word.dict(), owner_id=user_id, text=word.word)
+    db_word = models.Word(**word.dict(), owner_id=user_id)
     db.add(db_word)
     db.commit()
     db.refresh(db_word)

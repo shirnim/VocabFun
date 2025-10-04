@@ -21,7 +21,7 @@ class Word(Base):
     __tablename__ = "words"
 
     id = Column(Integer, primary_key=True, index=True)
-    text = Column(String, index=True)
+    word = Column(String, index=True)
     sentence = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
